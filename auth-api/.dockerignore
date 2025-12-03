@@ -1,0 +1,7 @@
+bin
+vendor
+.env
+.DS_Store
+.git
+Dockerfile
+*.exe
