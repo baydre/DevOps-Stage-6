@@ -1,0 +1,6 @@
+target
+.m2
+.env
+.DS_Store
+.git
+Dockerfile
