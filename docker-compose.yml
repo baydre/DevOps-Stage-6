@@ -1,0 +1,146 @@
+version: '3.8'
+
+services:
+  # Traefik Reverse Proxy
+  traefik:
+    image: traefik:v2.9
+    container_name: traefik
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # Disable HTTP to HTTPS redirect for local testing
+      # - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      # - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      # - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
+      # Disable Let's Encrypt for local testing (rate-limited)
+      # - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      # - "--certificatesresolvers.myresolver.acme.email=contact@todoforge.mooo.com"
+      # - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "8000:80"
+      - "8443:443"
+      - "8080:8080"  # Traefik Dashboard
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "letsencrypt:/letsencrypt"
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # Frontend (Vue.js)
+  frontend:
+    build: ./frontend
+    container_name: frontend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`todoforge.mooo.com`) || Host(`localhost`)"
+      - "traefik.http.routers.frontend.entrypoints=web"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
+    environment:
+      - PORT=80
+      - AUTH_API_ADDRESS=http://auth-api:8081
+      - TODOS_API_ADDRESS=http://todos-api:8082
+    networks:
+      - app-network
+    restart: unless-stopped
+    depends_on:
+      - auth-api
+      - todos-api
+
+  # Auth API (Go)
+  auth-api:
+    build: ./auth-api
+    container_name: auth-api
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.auth-api.rule=(Host(`todoforge.mooo.com`) || Host(`localhost`)) && PathPrefix(`/api/auth`)"
+      - "traefik.http.routers.auth-api.entrypoints=web"
+      - "traefik.http.middlewares.auth-api-stripprefix.stripprefix.prefixes=/api/auth"
+      - "traefik.http.routers.auth-api.middlewares=auth-api-stripprefix"
+      - "traefik.http.services.auth-api.loadbalancer.server.port=8081"
+    environment:
+      - AUTH_API_PORT=8081
+      - JWT_SECRET=nSxSKUdcrlRQ7PZH1e4TMymEGvv6JcbqCAsH89A99HQ=
+      - USERS_API_ADDRESS=http://users-api:8083
+    networks:
+      - app-network
+    restart: unless-stopped
+    depends_on:
+      - users-api
+
+  # Todos API (Node.js)
+  todos-api:
+    build: ./todos-api
+    container_name: todos-api
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.todos-api.rule=(Host(`todoforge.mooo.com`) || Host(`localhost`)) && PathPrefix(`/api/todos`)"
+      - "traefik.http.routers.todos-api.entrypoints=web"
+      - "traefik.http.middlewares.todos-api-stripprefix.stripprefix.prefixes=/api/todos"
+      - "traefik.http.routers.todos-api.middlewares=todos-api-stripprefix"
+      - "traefik.http.services.todos-api.loadbalancer.server.port=3000"
+    environment:
+      - JWT_SECRET=nSxSKUdcrlRQ7PZH1e4TMymEGvv6JcbqCAsH89A99HQ=
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_CHANNEL=log_channel
+    networks:
+      - app-network
+    restart: unless-stopped
+    depends_on:
+      - redis
+
+  # Users API (Java Spring Boot)
+  users-api:
+    build: ./users-api
+    container_name: users-api
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.users-api.rule=(Host(`todoforge.mooo.com`) || Host(`localhost`)) && PathPrefix(`/api/users`)"
+      - "traefik.http.routers.users-api.entrypoints=web"
+      - "traefik.http.middlewares.users-api-stripprefix.stripprefix.prefixes=/api/users"
+      - "traefik.http.routers.users-api.middlewares=users-api-stripprefix"
+      - "traefik.http.services.users-api.loadbalancer.server.port=8083"
+    environment:
+      - SERVER_PORT=8083
+      - JWT_SECRET=nSxSKUdcrlRQ7PZH1e4TMymEGvv6JcbqCAsH89A99HQ=
+      - SPRING_PROFILES_ACTIVE=docker
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # Log Processor (Python)
+  log-processor:
+    build: ./log-message-processor
+    container_name: log-processor
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_CHANNEL=log_channel
+    networks:
+      - app-network
+    restart: unless-stopped
+    depends_on:
+      - redis
+
+  # Redis (for queue management)
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    volumes:
+      - redis-data:/data
+    networks:
+      - app-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+volumes:
+  letsencrypt:
+  redis-data:
+
+networks:
+  app-network:
+    driver: bridge
