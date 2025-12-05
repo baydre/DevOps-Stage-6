@@ -1,0 +1,197 @@
+name: Infrastructure Deployment
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'infra/terraform/**'
+      - 'infra/ansible/**'
+      - '.github/workflows/infrastructure.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'infra/terraform/**'
+      - 'infra/ansible/**'
+  workflow_dispatch:
+
+jobs:
+  terraform-plan:
+    runs-on: ubuntu-latest
+    outputs:
+      has_changes: ${{ steps.plan.outputs.has_changes }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.5.0
+        
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-west-2
+        
+    - name: Terraform Init
+      working-directory: ./infra/terraform
+      run: terraform init
+      
+    - name: Terraform Validate
+      working-directory: ./infra/terraform
+      run: terraform validate
+      
+    - name: Terraform Plan
+      working-directory: ./infra/terraform
+      run: |
+        terraform plan -out=tfplan
+        terraform show -no-color tfplan > plan.txt
+      id: plan
+      
+    - name: Check for Changes
+      working-directory: ./infra/terraform
+      run: |
+        if grep -q "No changes" plan.txt; then
+          echo "has_changes=false" >> $GITHUB_OUTPUT
+          echo "✅ No infrastructure changes detected"
+        else
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+          echo "⚠️ Infrastructure changes detected"
+          cat plan.txt
+        fi
+      id: check_changes
+      
+    - name: Upload Plan
+      if: steps.check_changes.outputs.has_changes == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: terraform-plan
+        path: infra/terraform/tfplan
+        retention-days: 5
+
+  terraform-apply:
+    needs: terraform-plan
+    if: needs.terraform-plan.outputs.has_changes == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.5.0
+        
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-west-2
+        
+    - name: Terraform Init
+      working-directory: ./infra/terraform
+      run: terraform init
+      
+    - name: Download Plan
+      uses: actions/download-artifact@v4
+      with:
+        name: terraform-plan
+        path: infra/terraform/
+        
+    - name: Terraform Apply
+      working-directory: ./infra/terraform
+      run: terraform apply -auto-approve tfplan
+      
+    - name: Get Instance IP
+      id: instance_ip
+      working-directory: ./infra/terraform
+      run: |
+        INSTANCE_IP=$(terraform output -raw instance_public_ip)
+        echo "ip=$INSTANCE_IP" >> $GITHUB_OUTPUT
+        echo "✅ Instance IP: $INSTANCE_IP"
+      
+    - name: Setup SSH Key
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H ${{ steps.instance_ip.outputs.ip }} >> ~/.ssh/known_hosts
+        
+    - name: Wait for Instance
+      run: |
+        echo "⏳ Waiting for instance to be ready..."
+        for i in {1..30}; do
+          if ssh -i ~/.ssh/deploy_key -o ConnectTimeout=5 ubuntu@${{ steps.instance_ip.outputs.ip }} "echo 'Instance ready'"; then
+            echo "✅ Instance is ready"
+            exit 0
+          fi
+          echo "Attempt $i/30 failed, retrying..."
+          sleep 10
+        done
+        echo "❌ Instance not responding after 5 minutes"
+        exit 1
+        
+    - name: Run Ansible Deployment
+      working-directory: ./infra/ansible
+      run: |
+        ansible-playbook -i inventory.ini playbook.yml
+      env:
+        ANSIBLE_HOST_KEY_CHECKING: False
+        
+    - name: Verify Deployment
+      run: |
+        echo "🔍 Verifying application deployment..."
+        sleep 30
+        if curl -s -H "Host: localhost" http://${{ steps.instance_ip.outputs.ip }}/ | grep -q "frontend"; then
+          echo "✅ Application is responding correctly"
+        else
+          echo "⚠️ Application may not be fully ready yet"
+        fi
+
+  drift-detection:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.5.0
+        
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-west-2
+        
+    - name: Terraform Init
+      working-directory: ./infra/terraform
+      run: terraform init
+      
+    - name: Terraform Plan (Drift Check)
+      working-directory: ./infra/terraform
+      run: |
+        terraform plan -detailed-exitcode > /dev/null 2>&1
+        EXIT_CODE=$?
+        if [ $EXIT_CODE -eq 0 ]; then
+          echo "✅ No drift detected"
+        elif [ $EXIT_CODE -eq 2 ]; then
+          echo "⚠️ Configuration drift detected!"
+          terraform plan -no-color
+          exit 1
+        else
+          echo "❌ Error running terraform plan"
+          exit 1
+        fi

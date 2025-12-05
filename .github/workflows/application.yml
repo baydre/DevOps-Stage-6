@@ -1,0 +1,150 @@
+name: Application Deployment
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'auth-api/**'
+      - 'frontend/**'
+      - 'log-message-processor/**'
+      - 'todos-api/**'
+      - 'users-api/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/application.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'auth-api/**'
+      - 'frontend/**'
+      - 'log-message-processor/**'
+      - 'todos-api/**'
+      - 'users-api/**'
+      - 'docker-compose.yml'
+  workflow_dispatch:
+
+jobs:
+  check-infrastructure:
+    runs-on: ubuntu-latest
+    outputs:
+      instance_ip: ${{ steps.get_instance.outputs.ip }}
+      instance_exists: ${{ steps.get_instance.outputs.exists }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-west-2
+        
+    - name: Check Instance Exists
+      id: get_instance
+      run: |
+        INSTANCE_IP=$(aws ec2 describe-instances \
+          --filters "Name=tag:Name,Values=devops-stage-6-web-dev" \
+          "Name=instance-state-name,Values=running" \
+          --query "Reservations[0].Instances[0].PublicIpAddress" \
+          --output text)
+        
+        if [ "$INSTANCE_IP" != "None" ] && [ -n "$INSTANCE_IP" ]; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+          echo "ip=$INSTANCE_IP" >> $GITHUB_OUTPUT
+          echo "✅ Instance found at $INSTANCE_IP"
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+          echo "⚠️ No running instance found. Run infrastructure deployment first."
+          exit 1
+        fi
+
+  deploy-application:
+    needs: check-infrastructure
+    if: needs.check-infrastructure.outputs.instance_exists == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup SSH Key
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H ${{ needs.check-infrastructure.outputs.instance_ip }} >> ~/.ssh/known_hosts
+        
+    - name: Pull Latest Code on Server
+      run: |
+        ssh -i ~/.ssh/deploy_key ubuntu@${{ needs.check-infrastructure.outputs.instance_ip }} << 'EOF'
+          cd /opt/app
+          sudo git pull origin main
+        EOF
+        
+    - name: Restart Application
+      run: |
+        ssh -i ~/.ssh/deploy_key ubuntu@${{ needs.check-infrastructure.outputs.instance_ip }} << 'EOF'
+          cd /opt/app
+          sudo docker-compose down
+          sudo docker-compose up -d
+          echo "✅ Application containers restarted"
+        EOF
+        
+    - name: Wait for Application
+      run: |
+        echo "⏳ Waiting for application to be ready..."
+        sleep 30
+        
+    - name: Verify Deployment
+      run: |
+        INSTANCE_IP="${{ needs.check-infrastructure.outputs.instance_ip }}"
+        
+        # Check if containers are running
+        CONTAINER_COUNT=$(ssh -i ~/.ssh/deploy_key ubuntu@$INSTANCE_IP \
+          "sudo docker-compose -f /opt/app/docker-compose.yml ps --quiet | wc -l")
+        
+        echo "📊 Running containers: $CONTAINER_COUNT"
+        
+        # Test frontend
+        if curl -s -H "Host: localhost" http://$INSTANCE_IP/ | grep -q "frontend"; then
+          echo "✅ Frontend is responding"
+        else
+          echo "❌ Frontend is not responding"
+          exit 1
+        fi
+        
+        # Test Traefik dashboard
+        if curl -s -o /dev/null -w "%{http_code}" http://$INSTANCE_IP:8080 | grep -q "200\|401"; then
+          echo "✅ Traefik dashboard is accessible"
+        else
+          echo "⚠️ Traefik dashboard may not be accessible"
+        fi
+        
+        echo "✅ Application deployment verified successfully"
+
+  rollback:
+    needs: [check-infrastructure, deploy-application]
+    if: failure() && needs.check-infrastructure.outputs.instance_exists == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Setup SSH Key
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H ${{ needs.check-infrastructure.outputs.instance_ip }} >> ~/.ssh/known_hosts
+        
+    - name: Rollback Application
+      run: |
+        ssh -i ~/.ssh/deploy_key ubuntu@${{ needs.check-infrastructure.outputs.instance_ip }} << 'EOF'
+          cd /opt/app
+          echo "🔄 Rolling back to previous version..."
+          sudo git reset --hard HEAD~1
+          sudo docker-compose down
+          sudo docker-compose up -d
+          echo "✅ Rollback completed"
+        EOF
