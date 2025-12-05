@@ -1,0 +1,101 @@
+---
+- name: Create application directory
+  file:
+    path: "{{ app_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Check if the repository is already cloned
+  stat:
+    path: "{{ app_dir }}/.git"
+  register: repo_exists
+
+- name: Clone or update the repository
+  git:
+    repo: "{{ app_repo_url }}"
+    dest: "{{ app_dir }}"
+    version: "{{ app_branch }}"
+    force: yes
+  register: repo_updated
+  notify: Restart application
+
+- name: Create environment file
+  template:
+    src: .env.j2
+    dest: "{{ app_dir }}/.env"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0600'
+  notify: Restart application
+
+- name: Create Traefik configuration directory
+  file:
+    path: "{{ traefik_config_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Create Traefik configuration file
+  template:
+    src: traefik.yml.j2
+    dest: "{{ traefik_config_dir }}/traefik.yml"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+  notify: Restart traefik
+
+- name: Create Traefik dynamic configuration directory
+  file:
+    path: "{{ traefik_dynamic_config_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Create Traefik dynamic configuration file
+  template:
+    src: dynamic_config.yml.j2
+    dest: "{{ traefik_dynamic_config_dir }}/dynamic_config.yml"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+  notify: Restart traefik
+
+- name: Create SSL certificates directory
+  file:
+    path: "{{ ssl_certs_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0700'
+
+- name: Check if Docker Compose file exists
+  stat:
+    path: "{{ app_dir }}/docker-compose.yml"
+  register: compose_file_exists
+
+- name: Create Docker Compose file from template
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ app_dir }}/docker-compose.yml"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+  when: not compose_file_exists.stat.exists
+  notify: Restart application
+
+- name: Start or update Docker Compose services
+  docker_compose:
+    project_src: "{{ app_dir }}"
+    state: present
+    pull: yes
+    restarted: "{{ repo_updated.changed }}"
+  register: compose_result
+
+- name: Display Docker Compose result
+  debug:
+    var: compose_result
+  when: debug_mode | default(false)

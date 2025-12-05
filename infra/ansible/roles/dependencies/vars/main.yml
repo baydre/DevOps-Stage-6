@@ -1,0 +1,29 @@
+---
+# Docker Compose version
+docker_compose_version: "1.29.2"
+
+# Docker Compose installation method: 'pip' or 'binary'
+docker_compose_install_method: "pip"
+
+# Docker daemon configuration
+docker_daemon_config:
+  log-driver: "json-file"
+  log-opts:
+    max-size: "10m"
+    max-file: "3"
+
+# Logrotate configuration for Docker containers
+docker_logrotate_conf: |
+  /var/lib/docker/containers/*/*.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 root root
+    postrotate
+      # Reload docker to ensure new containers use the new log configuration
+      systemctl reload docker 2>/dev/null || true
+    endscript
+  }

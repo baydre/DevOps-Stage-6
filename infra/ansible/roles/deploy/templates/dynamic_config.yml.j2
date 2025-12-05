@@ -1,0 +1,48 @@
+http:
+  routers:
+    frontend:
+      rule: "Host(`{{ app_domain }}`)"
+      service: frontend
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+    todos-api:
+      rule: "Host(`{{ app_domain }}`) && PathPrefix(`/api/todos`)"
+      service: todos-api
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+    users-api:
+      rule: "Host(`{{ app_domain }}`) && PathPrefix(`/api/users`)"
+      service: users-api
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+    auth-api:
+      rule: "Host(`{{ app_domain }}`) && PathPrefix(`/api/auth`)"
+      service: auth-api
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    frontend:
+      loadBalancer:
+        servers:
+          - url: "http://frontend:80"
+    todos-api:
+      loadBalancer:
+        servers:
+          - url: "http://todos-api:3000"
+    users-api:
+      loadBalancer:
+        servers:
+          - url: "http://users-api:8080"
+    auth-api:
+      loadBalancer:
+        servers:
+          - url: "http://auth-api:8080"

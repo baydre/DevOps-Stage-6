@@ -1,0 +1,5 @@
+---
+# Vault variables (should be encrypted with ansible-vault in production)
+# For testing, these are the same secrets from docker-compose.yml
+
+vault_jwt_secret: "nSxSKUdcrlRQ7PZH1e4TMymEGvv6JcbqCAsH89A99HQ="
