@@ -1,0 +1,51 @@
+---
+# Application settings
+app_dir: "/opt/app"
+app_repo_url: "https://github.com/baydre/DevOps-Stage-6.git"
+app_branch: "main"
+
+# Traefik configuration
+traefik_config_dir: "/opt/traefik"
+traefik_dynamic_config_dir: "/opt/traefik/config"
+traefik_dashboard_port: "8080"
+traefik_dashboard_host: "todoforge.mooo.com"
+
+# SSL certificates
+ssl_certs_dir: "/opt/traefik/certs"
+ssl_email: "contact@todoforge.mooo.com"
+
+# Debug mode
+debug_mode: false
+
+# Environment variables for docker-compose
+app_env_vars:
+  JWT_SECRET: "{{ vault_jwt_secret }}"
+
+# Traefik configuration
+traefik_config:
+  api:
+    dashboard: true
+    insecure: true
+  entryPoints:
+    web:
+      address: ":80"
+      http:
+        redirections:
+          entryPoint:
+            to: websecure
+            scheme: https
+    websecure:
+      address: ":443"
+  providers:
+    docker:
+      exposedByDefault: false
+    file:
+      directory: /config
+      watch: true
+  certificatesResolvers:
+    letsencrypt:
+      acme:
+        email: "{{ ssl_email }}"
+        storage: /letsencrypt/acme.json
+        httpChallenge:
+          entryPoint: web

@@ -1,0 +1,8 @@
+---
+- name: Restart docker
+  service:
+    name: docker
+    state: restarted
+
+- name: Reset connection
+  meta: reset_connection

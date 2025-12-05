@@ -1,0 +1,15 @@
+---
+- name: Restart application
+  docker_compose:
+    project_src: "{{ app_dir }}"
+    state: present
+    restarted: yes
+  listen: "Restart application"
+
+- name: Restart traefik
+  docker_compose:
+    project_src: "{{ app_dir }}"
+    services: traefik
+    state: present
+    restarted: yes
+  listen: "Restart traefik"
