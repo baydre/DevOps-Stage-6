@@ -11,14 +11,14 @@ services:
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
-      # Disable HTTP to HTTPS redirect for local testing
-      # - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
-      # - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
-      # - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
-      # Disable Let's Encrypt for local testing (rate-limited)
-      # - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
-      # - "--certificatesresolvers.myresolver.acme.email=contact@todoforge.mooo.com"
-      # - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+      # HTTP to HTTPS redirect
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
+      # Let's Encrypt automatic SSL
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.email=contact@todoforge.mooo.com"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
     ports:
       - "80:80"
       - "443:443"
@@ -36,8 +36,9 @@ services:
     container_name: frontend
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.frontend.rule=Host(`todoforge.mooo.com`) || Host(`localhost`)"
-      - "traefik.http.routers.frontend.entrypoints=web"
+      - "traefik.http.routers.frontend.rule=Host(`todoforge.mooo.com`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls.certresolver=myresolver"
       - "traefik.http.services.frontend.loadbalancer.server.port=80"
     environment:
       - PORT=80
@@ -56,8 +57,9 @@ services:
     container_name: auth-api
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.auth-api.rule=(Host(`todoforge.mooo.com`) || Host(`localhost`)) && PathPrefix(`/api/auth`)"
-      - "traefik.http.routers.auth-api.entrypoints=web"
+      - "traefik.http.routers.auth-api.rule=Host(`todoforge.mooo.com`) && PathPrefix(`/api/auth`)"
+      - "traefik.http.routers.auth-api.entrypoints=websecure"
+      - "traefik.http.routers.auth-api.tls.certresolver=myresolver"
       - "traefik.http.middlewares.auth-api-stripprefix.stripprefix.prefixes=/api/auth"
       - "traefik.http.routers.auth-api.middlewares=auth-api-stripprefix"
       - "traefik.http.services.auth-api.loadbalancer.server.port=8081"
@@ -77,8 +79,9 @@ services:
     container_name: todos-api
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.todos-api.rule=(Host(`todoforge.mooo.com`) || Host(`localhost`)) && PathPrefix(`/api/todos`)"
-      - "traefik.http.routers.todos-api.entrypoints=web"
+      - "traefik.http.routers.todos-api.rule=Host(`todoforge.mooo.com`) && PathPrefix(`/api/todos`)"
+      - "traefik.http.routers.todos-api.entrypoints=websecure"
+      - "traefik.http.routers.todos-api.tls.certresolver=myresolver"
       - "traefik.http.middlewares.todos-api-stripprefix.stripprefix.prefixes=/api/todos"
       - "traefik.http.routers.todos-api.middlewares=todos-api-stripprefix"
       - "traefik.http.services.todos-api.loadbalancer.server.port=3000"
@@ -99,8 +102,9 @@ services:
     container_name: users-api
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.users-api.rule=(Host(`todoforge.mooo.com`) || Host(`localhost`)) && PathPrefix(`/api/users`)"
-      - "traefik.http.routers.users-api.entrypoints=web"
+      - "traefik.http.routers.users-api.rule=Host(`todoforge.mooo.com`) && PathPrefix(`/api/users`)"
+      - "traefik.http.routers.users-api.entrypoints=websecure"
+      - "traefik.http.routers.users-api.tls.certresolver=myresolver"
       - "traefik.http.middlewares.users-api-stripprefix.stripprefix.prefixes=/api/users"
       - "traefik.http.routers.users-api.middlewares=users-api-stripprefix"
       - "traefik.http.services.users-api.loadbalancer.server.port=8083"
