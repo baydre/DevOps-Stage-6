@@ -1,0 +1,67 @@
+# Environment files
+.env
+.env.local
+.env.*.local
+.secrets
+
+# Keep sample env file
+!.env.sample
+
+# Terraform
+infra/terraform/.terraform/
+infra/terraform/.terraform.lock.hcl
+infra/terraform/terraform.tfstate
+infra/terraform/terraform.tfstate.backup
+infra/terraform/*.tfplan
+infra/terraform/tfplan
+infra/terraform/plan.txt
+infra/terraform/terraform.tfvars
+
+# Ansible
+infra/ansible/inventory.ini
+infra/ansible/inventory-dynamic
+infra/ansible/*.retry
+
+# SSH Keys
+*.pem
+*.key
+id_rsa*
+
+# Act (local GitHub Actions testing)
+.actrc
+.act/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+
+# Java
+target/
+*.class
+*.jar
+*.war
+
+# Logs
+*.log
+logs/
