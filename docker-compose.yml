@@ -84,7 +84,7 @@ services:
       - "traefik.http.routers.todos-api.tls.certresolver=myresolver"
       - "traefik.http.middlewares.todos-api-stripprefix.stripprefix.prefixes=/api/todos"
       - "traefik.http.routers.todos-api.middlewares=todos-api-stripprefix"
-      - "traefik.http.services.todos-api.loadbalancer.server.port=3000"
+      - "traefik.http.services.todos-api.loadbalancer.server.port=8082"
     environment:
       - JWT_SECRET=nSxSKUdcrlRQ7PZH1e4TMymEGvv6JcbqCAsH89A99HQ=
       - REDIS_HOST=redis
