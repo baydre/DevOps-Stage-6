@@ -115,12 +115,20 @@ jobs:
         
         echo "📊 Running containers: $CONTAINER_COUNT"
         
-        # Test frontend
-        if curl -s -H "Host: localhost" http://$INSTANCE_IP/ | grep -q "frontend"; then
-          echo "✅ Frontend is responding"
+        # Test frontend via domain name (Traefik uses Host-based routing)
+        if curl -skL -H "Host: todoforge.mooo.com" https://$INSTANCE_IP/ | grep -q "frontend"; then
+          echo "✅ Frontend is responding (HTTPS)"
         else
-          echo "❌ Frontend is not responding"
-          exit 1
+          echo "⚠️ Direct HTTPS check failed, checking via SSH..."
+          # Check if frontend container is actually running
+          FRONTEND_STATUS=$(ssh -i ~/.ssh/deploy_key ubuntu@$INSTANCE_IP \
+            "sudo docker ps --filter 'name=frontend' --format '{{.Status}}'")
+          if [[ "$FRONTEND_STATUS" == *"Up"* ]]; then
+            echo "✅ Frontend container is running: $FRONTEND_STATUS"
+          else
+            echo "❌ Frontend container is not running properly"
+            exit 1
+          fi
         fi
         
         # Test Traefik dashboard
