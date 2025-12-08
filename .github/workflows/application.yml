@@ -46,7 +46,7 @@ jobs:
       id: get_instance
       run: |
         INSTANCE_IP=$(aws ec2 describe-instances \
-          --filters "Name=tag:Name,Values=devops-stage-6-web-dev" \
+          --filters "Name=tag:Name,Values=devops-stage-6-instance-dev" \
           "Name=instance-state-name,Values=running" \
           --query "Reservations[0].Instances[0].PublicIpAddress" \
           --output text)
