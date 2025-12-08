@@ -75,6 +75,13 @@ jobs:
         mkdir -p ~/.ssh
         echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
         chmod 600 ~/.ssh/deploy_key
+        # Verify key format
+        if ! ssh-keygen -l -f ~/.ssh/deploy_key >/dev/null 2>&1; then
+          echo "❌ Invalid SSH key format in SSH_PRIVATE_KEY secret"
+          echo "Please ensure the secret contains a valid RSA private key"
+          exit 1
+        fi
+        echo "✅ SSH key validated successfully"
         ssh-keyscan -H ${{ needs.check-infrastructure.outputs.instance_ip }} >> ~/.ssh/known_hosts
         
     - name: Pull Latest Code on Server
@@ -136,6 +143,11 @@ jobs:
         mkdir -p ~/.ssh
         echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
         chmod 600 ~/.ssh/deploy_key
+        # Verify key format
+        if ! ssh-keygen -l -f ~/.ssh/deploy_key >/dev/null 2>&1; then
+          echo "❌ Invalid SSH key format in SSH_PRIVATE_KEY secret"
+          exit 1
+        fi
         ssh-keyscan -H ${{ needs.check-infrastructure.outputs.instance_ip }} >> ~/.ssh/known_hosts
         
     - name: Rollback Application
