@@ -82,7 +82,7 @@ services:
       - "traefik.http.routers.todos-api.rule=Host(`todoforge.mooo.com`) && PathPrefix(`/api/todos`)"
       - "traefik.http.routers.todos-api.entrypoints=websecure"
       - "traefik.http.routers.todos-api.tls.certresolver=myresolver"
-      - "traefik.http.middlewares.todos-api-stripprefix.stripprefix.prefixes=/api/todos"
+      - "traefik.http.middlewares.todos-api-stripprefix.stripprefix.prefixes=/api"
       - "traefik.http.routers.todos-api.middlewares=todos-api-stripprefix"
       - "traefik.http.services.todos-api.loadbalancer.server.port=8082"
     environment:
@@ -105,7 +105,7 @@ services:
       - "traefik.http.routers.users-api.rule=Host(`todoforge.mooo.com`) && PathPrefix(`/api/users`)"
       - "traefik.http.routers.users-api.entrypoints=websecure"
       - "traefik.http.routers.users-api.tls.certresolver=myresolver"
-      - "traefik.http.middlewares.users-api-stripprefix.stripprefix.prefixes=/api/users"
+      - "traefik.http.middlewares.users-api-stripprefix.stripprefix.prefixes=/api"
       - "traefik.http.routers.users-api.middlewares=users-api-stripprefix"
       - "traefik.http.services.users-api.loadbalancer.server.port=8083"
     environment:
