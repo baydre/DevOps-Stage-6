@@ -88,7 +88,15 @@ jobs:
       run: |
         ssh -i ~/.ssh/deploy_key ubuntu@${{ needs.check-infrastructure.outputs.instance_ip }} << 'EOF'
           cd /opt/app
+          # Backup .env before pulling (it's not in git, but ensure it's preserved)
+          if [ -f .env ]; then
+            sudo cp .env .env.backup
+          fi
           sudo git pull origin main
+          # Restore .env if it was backed up
+          if [ -f .env.backup ]; then
+            sudo mv .env.backup .env
+          fi
         EOF
         
     - name: Restart Application
