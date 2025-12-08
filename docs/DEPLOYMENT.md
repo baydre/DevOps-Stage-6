@@ -64,6 +64,18 @@ See `.env.sample` for the complete list. Key variables:
 - `REDIS_HOST` - Redis hostname for message queue
 - Service addresses for inter-service communication
 
+### Default User Credentials
+
+The application comes with pre-seeded users for testing (managed by users-api):
+
+| Username | Password  | Role        |
+|----------|-----------|-------------|
+| admin    | Admin123  | Administrator |
+| hng      | HngTech   | Standard User |
+| user     | Password  | Standard User |
+
+**Note**: These credentials are for reference only and are seeded in the database by the users-api service. They are not environment variables and should not be changed in `.env`. To modify user credentials, update them through the application or directly in the database.
+
 ### Generating Secure Secrets
 
 Generate a new JWT_SECRET:
